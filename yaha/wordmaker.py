@@ -1,15 +1,17 @@
 # -*- coding=utf-8 -*-
-import sys
-import os, codecs, re, math
+import codecs
+import math
 import collections
 import threading
 from yaha import BaseCuttor, WordBase, get_dict, DICTS
 
-max_word_len = 5 
-entropy_threshold = 1 
+max_word_len = 5
+entropy_threshold = 1
 max_to_flush = 10000
 
+
 class Word(WordBase):
+
     def __init__(self, id):
         super(WordBase, self).__init__()
 
@@ -36,7 +38,7 @@ class Word(WordBase):
         else:
             self.l[word] = 1
         self.l_len += 1
-    
+
     def add_r(self, word):
         if word in self.r:
             self.r[word] += 1
@@ -56,6 +58,8 @@ class Word(WordBase):
 # How to add fields to Objects dynamically ?
 MODIFY_LOCK = threading.RLock()
 MODIFY_INIT = False
+
+
 def modify_wordbase(word):
         word.process_freq = 1
         word.total_freq = 1
@@ -72,6 +76,7 @@ def modify_wordbase(word):
         word.add_r = Word.add_r
         word.reset = Word.reset
 
+
 def get_modified_dict():
     global MODIFY_INIT
     dict = get_dict(DICTS.MAIN)
@@ -85,19 +90,22 @@ def get_modified_dict():
         MODIFY_INIT = True
     return dict
 
+
 def info_entropy(words, total):
-    result = 0 
-    for word, cnt in words.iteritems():
+    result = 0
+    for word, cnt in words.items():
         p = float(cnt) / total
         result -= p * math.log(p)
     return result
 
+
 class Process(object):
+
     def __init__(self, id):
         self.id = id
         self.words = []
         self.cache_lines = []
-    
+
     def add_words(self, word):
         self.words.append(word)
 
@@ -105,31 +113,35 @@ class Process(object):
         l = len(sentence)
         wl = min(l, max_word_len)
         self.cache_lines.append(sentence)
-        for i in xrange(1, wl + 1): 
-            for j in xrange(0, l - i + 1): 
+        for i in range(1, wl + 1):
+            for j in range(0, l - i + 1):
                 if j == 0:
-                    if j < l-i:
-                        word_dict.add_word_r(sentence[j:j+i], sentence[j+i])
+                    if j < l - i:
+                        word_dict.add_word_r(
+                            sentence[j:j + i], sentence[j + i])
                     else:
-                        word_dict.add_word(sentence[j:j+i])
+                        word_dict.add_word(sentence[j:j + i])
                 else:
-                    if j < l-i:
-                        word_dict.add_word_lr(sentence[j:j + i], sentence[j-1], sentence[j+i])
+                    if j < l - i:
+                        word_dict.add_word_lr(
+                            sentence[j:j + i], sentence[j - 1], sentence[j + i])
                     else:
-                        word_dict.add_word_l(sentence[j:j+i], sentence[j-1])
+                        word_dict.add_word_l(
+                            sentence[j:j + i], sentence[j - 1])
 
     def calc(self, word_dict):
         # calc all ps first
         for word in self.words:
             this_word = word_dict.get_word(word)
-            this_word.process_ps = float(this_word.process_freq)/word_dict.process_total
-    
+            this_word.process_ps = float(
+                this_word.process_freq) / word_dict.process_total
+
         # then calc the ps around the word
         for word in self.words:
             this_word = word_dict.get_word(word)
             if len(word) > 1:
                 p = 0
-                for i in xrange(1, len(word)):
+                for i in range(1, len(word)):
                     t = word_dict.ps(word[0:i]) * word_dict.ps(word[i:])
                     p = max(p, t)
                 if p > 0 and this_word.process_freq >= 3 and this_word.process_ps / p > 100:
@@ -138,7 +150,9 @@ class Process(object):
                     if this_word.r_len > 0 and info_entropy(this_word.r, this_word.r_len) < entropy_threshold:
                         continue
                     this_word.valid += 1
-                    this_word.curr_ps = math.log(float(this_word.total_freq+this_word.base_freq)/float(word_dict.base_total+word_dict.total/word_dict.id))
+                    this_word.curr_ps = math.log(float(this_word.total_freq + this_word.base_freq) / float(
+                        word_dict.base_total + word_dict.total / word_dict.id))
+
 
 class WordDict(BaseCuttor):
 
@@ -151,9 +165,9 @@ class WordDict(BaseCuttor):
         self.id = 0
         self.process_total = 0
         self.current_line = 0
-        
+
         self.WORD_MAX = 5
-        
+
         '''with codecs.open(dict_file, "r", "utf-8") as file:
             for line in file:
                 tokens = line.split(" ")
@@ -164,7 +178,7 @@ class WordDict(BaseCuttor):
                     this_word.base_freq = freq
                     self.dict[word] = this_word
                     self.base_total += freq
-        
+
         #normalize
         for word, term in self.dict.iteritems():
             term.base_ps = math.log(float(term.base_freq)/self.base_total)
@@ -192,29 +206,29 @@ class WordDict(BaseCuttor):
                         this_word.base_freq = freq
                         self.dict[word] = this_word
                         self.base_total += freq
-        #normalize
-        for word, term in self.dict.iteritems():
-            term.base_ps = math.log(float(term.base_freq)/self.base_total)
+        # normalize
+        for word, term in self.dict.items():
+            term.base_ps = math.log(float(term.base_freq) / self.base_total)
             term.curr_ps = term.base_ps
-    
+
     def exist(self, word):
         if word not in self.dict:
             return False
         this_word = self.dict[word]
-        return (this_word.curr_ps < 0.0) or (this_word.valid > self.id/2)
+        return (this_word.curr_ps < 0.0) or (this_word.valid > self.id / 2)
 
     def get_prob(self, word):
         if word in self.dict:
             return self.dict[word].curr_ps
         else:
             return 0.0
-    
+
     def new_process(self):
         self.id += 1
         self.process = Process(self.id)
         self.process_total = 0
         return self.process
-    
+
     def add_word(self, word):
         this_word = None
         if word in self.dict:
@@ -233,7 +247,7 @@ class WordDict(BaseCuttor):
         return this_word
 
     def learn(self, sentence):
-        for s,need_cut in self.cut_to_sentence(sentence):
+        for s, need_cut in self.cut_to_sentence(sentence):
             if not need_cut:
                 continue
             self.process.do_sentence(s, self)
@@ -255,11 +269,11 @@ class WordDict(BaseCuttor):
     def add_word_l(self, word, l):
         w = self.add_word(word)
         w.add_l(l)
-    
+
     def add_word_r(self, word, r):
         w = self.add_word(word)
         w.add_r(r)
-    
+
     def add_word_lr(self, word, l, r):
         w = self.add_word(word)
         w.add_l(l)
@@ -276,16 +290,17 @@ class WordDict(BaseCuttor):
 
     def save_to_file(self, filename):
         word_dict = self
-        final_words = [] 
-        for word, term in word_dict.dict.iteritems():
-            #if term.valid > word_dict.id/2 and term.base_freq == 0:
+        final_words = []
+        for word, term in word_dict.dict.items():
+            # if term.valid > word_dict.id/2 and term.base_freq == 0:
             # Use this to save more word
             if term.valid > 0 and term.base_freq == 0:
                 final_words.append(word)
 
-        final_words.sort(cmp = lambda x, y: cmp(word_dict.get_word(y).total_freq, word_dict.get_word(x).total_freq))
-        
+        final_words.sort(cmp=lambda x, y: cmp(
+            word_dict.get_word(y).total_freq, word_dict.get_word(x).total_freq))
+
         with codecs.open(filename, 'w', 'utf-8') as file:
             for word in final_words:
                 v = word_dict.get_word(word).total_freq
-                file.write("%s %d\n" % (word,v))
+                file.write("%s %d\n" % (word, v))

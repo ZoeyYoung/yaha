@@ -1,11 +1,11 @@
 # -*- coding: UTF-8 -*-
-import sys, os, os.path
+import os
+import os.path
 import codecs
 from django.utils.encoding import force_unicode
 from django.db.models import Count
 
-import yaha
-from yaha.analyse import ChineseAnalyzer 
+from yaha.analyse import ChineseAnalyzer
 
 try:
     import json
@@ -18,7 +18,8 @@ except ImportError:
 try:
     import whoosh
 except ImportError:
-    raise MissingDependency("The 'whoosh' backend requires the installation of 'Whoosh'. Please refer to the documentation.")
+    raise MissingDependency(
+        "The 'whoosh' backend requires the installation of 'Whoosh'. Please refer to the documentation.")
 
 # Bubble up the correct error.
 from whoosh.analysis import StemmingAnalyzer
@@ -29,6 +30,7 @@ from whoosh.qparser import QueryParser, MultifieldParser
 from whoosh.filedb.filestore import FileStorage, RamStorage
 from whoosh.searching import ResultsPage
 from whoosh.writing import AsyncWriter
+
 
 def _from_python(value):
     """
@@ -45,8 +47,8 @@ def _from_python(value):
         else:
             value = 'false'
     elif isinstance(value, (list, tuple)):
-        value = u','.join([force_unicode(v) for v in value])
-    elif isinstance(value, (int, long, float)):
+        value = ','.join([force_unicode(v) for v in value])
+    elif isinstance(value, (int, float)):
         # Leave it alone.
         pass
     else:
@@ -61,16 +63,17 @@ if use_file_storage and not os.path.exists(key_path):
 storage = FileStorage(key_path)
 index_fieldname = 'content'
 schema_fields = {
-        'id': WHOOSH_ID(stored=True, unique=True),
+    'id': WHOOSH_ID(stored=True, unique=True),
 }
 schema_fields[index_fieldname] = TEXT(stored=True, analyzer=ChineseAnalyzer())
 schema = Schema(**schema_fields)
 
-accepted_chars = re.compile(ur"[\u4E00-\u9FA5]+", re.UNICODE)
-accepted_line = re.compile(ur"\d+-\d+-\d+")
+accepted_chars = re.compile(r"[\u4E00-\u9FA5]+")
+accepted_line = re.compile(r"\d+-\d+-\d+")
+
 
 def get_content(filename):
-    accepted_line = re.compile(ur"\d+-\d+-\d+")
+    accepted_line = re.compile(r"\d+-\d+-\d+")
     file = codecs.open(filename, 'r', 'utf-8')
     content = ''
     names = []
@@ -88,33 +91,35 @@ def get_content(filename):
     file.close()
     return (content, names)
 
+
 def add_doc():
     index = storage.open_index(schema=schema)
     writer = index.writer()
-    
-    #parser = QueryParser(index_fieldname, schema=schema)
-    #parsed_query = parser.parse('%s:%s' % ('id', qq_id))
-    #parsed_query = parser.parse('%s:%s' % ('id', qq_id))
-    #writer.delete_by_query(query)
-    #writer.commit()
 
-    content,names = get_content('qq7')
-    
+    # parser = QueryParser(index_fieldname, schema=schema)
+    # parsed_query = parser.parse('%s:%s' % ('id', qq_id))
+    # parsed_query = parser.parse('%s:%s' % ('id', qq_id))
+    # writer.delete_by_query(query)
+    # writer.commit()
+
+    content, names = get_content('qq7')
+
     doc = {}
     doc['id'] = _from_python(qq_id)
     doc[index_fieldname] = content
-    
+
     try:
         writer.add_document(**doc)
         writer.commit()
-        #writer.update_document(**doc)
-    except Exception, e:
+        # writer.update_document(**doc)
+    except Exception as e:
         raise
+
 
 def write_db():
     index = storage.create_index(schema)
     writer = index.writer()
-    
+
     # read doc from Database by using django
     for dou in Preview.objects.all():
         doc = {}
@@ -123,11 +128,12 @@ def write_db():
         doc[index_fieldname] = text
         try:
             writer.update_document(**doc)
-        except Exception, e:
+        except Exception as e:
             raise
 
-    #add_doc(index, writer)
+    # add_doc(index, writer)
     writer.commit()
+
 
 def search_db():
     index = storage.open_index(schema=schema)
@@ -135,8 +141,8 @@ def search_db():
     parser = QueryParser(index_fieldname, schema=schema)
     parsed_query = parser.parse('%s:%s' % ('id', qq_id))
     raw_results = searcher.search(parsed_query)
-    
-    _,names = get_content('qq7')
+
+    _, names = get_content('qq7')
 
     corpus_filename = 'name_qq7'
     terms = {}
@@ -153,7 +159,7 @@ def search_db():
     for line in corpus_file:
         tokens = line.split(" ")
         term = tokens[0].strip()
-        if len(tokens) >= 3 and tokens[2].find('n')>=0:
+        if len(tokens) >= 3 and tokens[2].find('n') >= 0:
             n_terms[term] = tokens[2]
         else:
             n_terms[term] = ''
@@ -161,16 +167,17 @@ def search_db():
     for keyword, score in raw_results.key_terms(index_fieldname, docs=1000, numterms=240):
         if keyword in names:
             continue
-        if terms.has_key(keyword):
-            if not n_terms.has_key(keyword):
+        if keyword in terms:
+            if keyword not in n_terms:
                 keys.append(keyword)
-            elif n_terms.has_key(keyword) and n_terms[keyword].find('n')>=0:
+            elif keyword in n_terms and n_terms[keyword].find('n') >= 0:
                 keys.append(keyword)
-        #keys.append(keyword)
-    print ', '.join(keys)
-    #print len(raw_results)
-    #for result in raw_results:
+        # keys.append(keyword)
+    print(', '.join(keys))
+    # print len(raw_results)
+    # for result in raw_results:
     #    print result[index_fieldname]
+
 
 def key_all():
     index = storage.open_index(schema=schema)
@@ -178,16 +185,18 @@ def key_all():
     reader = searcher.reader()
     cnt = 0
     filename = 'idf.txt'
-    accepted_chars = re.compile(ur"[\u4E00-\u9FA5]+", re.UNICODE)
+    accepted_chars = re.compile(r"[\u4E00-\u9FA5]+")
     file = codecs.open(filename, "w", "utf-8")
-    file.write('%s\n' % reader.doc_count_all() )
+    file.write('%s\n' % reader.doc_count_all())
     for term in reader.field_terms('content'):
-    #for term in reader.most_frequent_terms('content', 100):
+    # for term in reader.most_frequent_terms('content', 100):
         if not accepted_chars.match(term):
             continue
         term_info = reader.term_info('content', term)
-        file.write('%s %d %d\n' % (term, term_info.doc_frequency(), term_info.max_weight()) )
+        file.write('%s %d %d\n' %
+                   (term, term_info.doc_frequency(), term_info.max_weight()))
     file.close()
+
 write_db()
 add_doc()
 search_db()
